@@ -686,6 +686,7 @@
       <button class="tab" data-view="escala">Escala</button>
       <button class="tab" data-view="documentacao">Documentação</button>
       <button class="tab" data-view="preventivo">Preventivo</button>
+      <button class="tab" data-view="cadastros">Cadastros</button>
     </div>
 
     <!-- INICIO -->
@@ -693,7 +694,7 @@
 
     <!-- ANUAL -->
     <div class="view" id="view-anual">
-      <div class="cardsub" style="margin-bottom:14px">Divisão de lucros da sociedade — 33% para cada sócio (Sócio 1, Sócio 2 e Sócio 3), sobre o saldo de cada mês. Clique num mês para ver o detalhe de Planos e Suplementos.</div>
+      <div class="cardsub" style="margin-bottom:14px">Divisão de lucros da sociedade (nomes e percentuais definidos em Cadastros), sobre o saldo de cada mês. Clique num mês para ver o detalhe de Planos e Suplementos.</div>
       <div class="kpis" id="kpi-anual"></div>
 
       <div class="card">
@@ -789,6 +790,7 @@
 
     <!-- PREVENTIVO -->
     <div class="view" id="view-preventivo"><div id="mod-preventivo"></div></div>
+    <div class="view" id="view-cadastros"><div id="mod-cadastros"></div></div>
 
     <div class="footnote" style="margin-top:18px">
       Dados alimentados manualmente pela aba Lançamento.
@@ -813,6 +815,54 @@ function mesLabelTop(ym){
 const EXTERNAL = {"saldo_suplem_mes_anterior":0,"margem_suplementos":{"venda_bruta":0,"custo_venda":0,"taxa_cartao":0,"margem_comercial":0,"quebra":0,"margem_final":0,"custo_lancado":false,"estoque_custo":0,"estoque_venda":0},"nextfit_planos":{"disponivel":false},"confronto_online":{"Dinheiro":0,"C6":0,"Infinity":0,"total":0},"contas_pagar":{"mes":"","grupos":[{"nome":"FOLHA DE PESSOAL","planejado":1200,"realizado":0,"itens":[{"nome":"Personal","planejado":100,"realizado":null},{"nome":"Estágio 1","planejado":100,"realizado":null},{"nome":"Recepção 1","planejado":100,"realizado":null},{"nome":"Recepção 2","planejado":100,"realizado":null},{"nome":"Suporte","planejado":100,"realizado":null},{"nome":"Estágio 2","planejado":100,"realizado":null},{"nome":"Limpeza","planejado":100,"realizado":null},{"nome":"Comissões","planejado":100,"realizado":null},{"nome":"Horas extras (Feriado)","planejado":100,"realizado":null},{"nome":"Impostos INSS","planejado":100,"realizado":null},{"nome":"Imposto FGTS","planejado":100,"realizado":null},{"nome":"Contratos Estágios","planejado":100,"realizado":null}]},{"nome":"PARCEIROS","planejado":500,"realizado":0,"itens":[{"nome":"Aula Balé","planejado":100,"realizado":null},{"nome":"Aula Dança","planejado":100,"realizado":null},{"nome":"Aula Muay Thai","planejado":100,"realizado":null},{"nome":"Nutri 1","planejado":100,"realizado":null},{"nome":"Nutri 2","planejado":100,"realizado":null}]},{"nome":"SISTEMAS","planejado":300,"realizado":0,"itens":[{"nome":"Moro suplementos","planejado":100,"realizado":null},{"nome":"Nextfit","planejado":100,"realizado":null},{"nome":"Spotify","planejado":100,"realizado":null}]},{"nome":"SERVIÇOS PRESTADOS","planejado":200,"realizado":0,"itens":[{"nome":"Lavanderia toalhas","planejado":100,"realizado":null},{"nome":"Criação cards e vídeos","planejado":100,"realizado":null}]},{"nome":"BENS DURAVEIS","planejado":100,"realizado":0,"itens":[]},{"nome":"MATERIAL DE EXPEDIENTE","planejado":100,"realizado":0,"itens":[]},{"nome":"IMPOSTOS E TAXAS","planejado":400,"realizado":0,"itens":[{"nome":"DAE - imposto de compra suple","planejado":100,"realizado":null},{"nome":"DAS - Simples Nacional","planejado":100,"realizado":null},{"nome":"Maquina infinity","planejado":100,"realizado":null},{"nome":"NexfitPay","planejado":100,"realizado":null}]},{"nome":"FIXAS / CONSUMO","planejado":600,"realizado":0,"itens":[{"nome":"Aluguel","planejado":100,"realizado":null},{"nome":"Energia Elétrica / Solar","planejado":100,"realizado":null},{"nome":"Água / esgoto","planejado":100,"realizado":null},{"nome":"Plano celular","planejado":100,"realizado":null},{"nome":"Internet","planejado":100,"realizado":null},{"nome":"Contador (a)","planejado":100,"realizado":null}]},{"nome":"OUTROS","planejado":100,"realizado":0,"itens":[]}],"total":{"planejado":3500,"realizado":0}},"anual":[]};
 
 const ANUAL_SOCIOS = [];
+
+// ---- Contas a pagar: itens e valores planejados ficam no banco (editáveis na aba Cadastros).
+// Os itens que estão no código acima servem só de modelo inicial (carregados 1 vez, se o banco estiver vazio).
+const CP_SEED = JSON.parse(JSON.stringify(EXTERNAL.contas_pagar));
+const GRUPOS_CP = CP_SEED.grupos.map(function(g){ return g.nome; });
+var CP_ITENS_DB = [];     // linhas da tabela contas_pagar_itens
+var CP_GRUPOS_DB = {};    // grupo -> orçamento do grupo (usado quando o grupo não tem itens)
+window.__cpOrcamentoErro = '';
+
+function aplicarOrcamentoContasPagar(){
+  var base = EXTERNAL.contas_pagar;
+  base.grupos = GRUPOS_CP.map(function(nome){
+    var itens = CP_ITENS_DB.filter(function(r){ return r.grupo === nome; })
+      .sort(function(a,b){ return (a.ordem||0) - (b.ordem||0); })
+      .map(function(r){ return { nome: r.nome, planejado: Number(r.planejado) || 0, realizado: null }; });
+    var plan = itens.length ? itens.reduce(function(a,i){ return a + i.planejado; }, 0) : (Number(CP_GRUPOS_DB[nome]) || 0);
+    return { nome: nome, planejado: plan, realizado: 0, itens: itens };
+  });
+  base.total = { planejado: base.grupos.reduce(function(a,g){ return a + g.planejado; }, 0), realizado: 0 };
+}
+
+window.initOrcamentoContasPagar = async function(){
+  window.__cpOrcamentoErro = '';
+  try{
+    var rg = await window.sb.from('contas_pagar_grupos').select('*');
+    var ri = await window.sb.from('contas_pagar_itens').select('*');
+    if (rg.error || ri.error) throw (rg.error || ri.error);
+    if (!rg.data || !rg.data.length){
+      var gSeed = CP_SEED.grupos.map(function(g){ return { grupo: g.nome, planejado: g.planejado }; });
+      var iSeed = [];
+      CP_SEED.grupos.forEach(function(g){
+        g.itens.forEach(function(it, i){ iSeed.push({ id: 'cp' + Math.random().toString(36).slice(2,10), grupo: g.nome, nome: it.nome, planejado: it.planejado, ordem: i + 1 }); });
+      });
+      var w1 = await window.sb.from('contas_pagar_grupos').insert(gSeed);
+      if (w1.error) throw w1.error;
+      if (iSeed.length){ var w2 = await window.sb.from('contas_pagar_itens').insert(iSeed); if (w2.error) throw w2.error; }
+      CP_GRUPOS_DB = {}; gSeed.forEach(function(g){ CP_GRUPOS_DB[g.grupo] = g.planejado; });
+      CP_ITENS_DB = iSeed;
+    } else {
+      CP_GRUPOS_DB = {}; rg.data.forEach(function(g){ CP_GRUPOS_DB[g.grupo] = Number(g.planejado) || 0; });
+      CP_ITENS_DB = ri.data || [];
+    }
+    aplicarOrcamentoContasPagar();
+  }catch(e){
+    window.__cpOrcamentoErro = (e && (e.message || e.code)) || 'erro desconhecido';
+    console.error('Orçamento de contas a pagar (usando os itens de modelo do código):', e);
+  }
+};
 
 var LANCAMENTOS = JSON.parse(document.getElementById('state-data').textContent);
 LANCAMENTOS.suplementos = LANCAMENTOS.suplementos || [];
@@ -985,6 +1035,7 @@ window.atualizarResumoFinanceiro = async function(){
     }
     if (typeof DATA !== 'undefined' && DATA.anual_socios){
       dados.anual_mensal = { meses: DATA.anual_socios.meses, totalS1: DATA.anual_socios.totalS1, totalS2: DATA.anual_socios.totalS2, totalS3: DATA.anual_socios.totalS3 };
+        dados.socios = sociosExport();
     }
     await sb.from('resumo_cache').update({ dados: dados, atualizado_em: new Date().toISOString() }).eq('id',1);
     if (window.atualizarResumoGerencialTodos) window.atualizarResumoGerencialTodos();
@@ -1095,8 +1146,34 @@ function buildConciliacao(ym){
 // Fevereiro–Julho são meses fechados (histórico); o mês corrente é calculado ao vivo a
 // partir dos lançamentos, para a divisão ficar sempre atualizada.
 function round2(v){ return Math.round((v + Number.EPSILON) * 100) / 100; }
-// Sociedade AD3 Fit: 3 sócios, 33% (1/3) cada.
-var SOCIO_FRAC = 1/3;
+// Sociedade: 3 sócios; nomes e percentuais vêm da tabela socios_config (aba Cadastros).
+// Padrão (até alguém salvar): partes iguais.
+var SOCIOS_CFG = [ { nome: 'Sócio 1', pct: 100/3 }, { nome: 'Sócio 2', pct: 100/3 }, { nome: 'Sócio 3', pct: 100/3 } ];
+function socioFrac(i){
+  var t = SOCIOS_CFG.reduce(function(a,x){ return a + (Number(x.pct) || 0); }, 0) || 1;
+  return (Number(SOCIOS_CFG[i].pct) || 0) / t;
+}
+function socioNomeRaw(i){ return String(SOCIOS_CFG[i].nome == null ? '' : SOCIOS_CFG[i].nome); }
+function socioNome(i){ return socioNomeRaw(i).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function socioPctTxt(i){ return String(Math.round(socioFrac(i) * 10000) / 100).replace('.', ','); }
+function socioRot(i){ return socioPctTxt(i) + '% ' + socioNome(i); }
+function sociosExport(){ return SOCIOS_CFG.map(function(x,i){ return { nome: socioNomeRaw(i), pct: Math.round(socioFrac(i) * 10000) / 100 }; }); }
+window.initSociosConfig = async function(){
+  window.__sociosErro = '';
+  try{
+    var r = await window.sb.from('socios_config').select('*').eq('id', 1).maybeSingle();
+    if (r.error) throw r.error;
+    if (r.data && Array.isArray(r.data.dados) && r.data.dados.length === 3){
+      SOCIOS_CFG = r.data.dados.map(function(x){ return { nome: String(x.nome || '').trim() || 'Sócio', pct: Number(x.pct) || 0 }; });
+    } else {
+      var w = await window.sb.from('socios_config').insert({ id: 1, dados: SOCIOS_CFG.map(function(x){ return { nome: x.nome, pct: Math.round(x.pct * 100) / 100 }; }) });
+      if (w.error) throw w.error;
+    }
+  }catch(e){
+    window.__sociosErro = (e && (e.message || e.code)) || 'erro desconhecido';
+    console.error('Sócios (usando partes iguais):', e);
+  }
+};
 
 // A divisão de cada mês (Sócio 1/2/3) é sempre 1/3 do saldo daquele mês naquela
 // linha de negócio — inclusive quando o saldo é negativo (prejuízo), o que reduz a
@@ -1113,15 +1190,15 @@ function buildAnualSocios(diaria, refMes){
         despesas: m.planos.despesas,
         saldo: m.planos.saldo,
         emConta: m.planos.emConta,
-        s1: round2(m.planos.saldo * SOCIO_FRAC),
-        s2: round2(m.planos.saldo * SOCIO_FRAC),
-        s3: round2(m.planos.saldo * SOCIO_FRAC)
+        s1: round2(m.planos.saldo * socioFrac(0)),
+        s2: round2(m.planos.saldo * socioFrac(1)),
+        s3: round2(m.planos.saldo * socioFrac(2))
       },
       suplementos: {
         saldo: supSaldo,
-        s1: round2(supSaldo * SOCIO_FRAC),
-        s2: round2(supSaldo * SOCIO_FRAC),
-        s3: round2(supSaldo * SOCIO_FRAC)
+        s1: round2(supSaldo * socioFrac(0)),
+        s2: round2(supSaldo * socioFrac(1)),
+        s3: round2(supSaldo * socioFrac(2))
       }
     };
   });
@@ -1142,8 +1219,8 @@ function buildAnualSocios(diaria, refMes){
     var planoSaldoG = (g.planos && g.planos.saldo) || 0;
     meses.push({
       mes: label,
-      planos: { saldo: planoSaldoG, s1: round2(planoSaldoG * SOCIO_FRAC), s2: round2(planoSaldoG * SOCIO_FRAC), s3: round2(planoSaldoG * SOCIO_FRAC) },
-      suplementos: { saldo: supSaldoG, s1: round2(supSaldoG * SOCIO_FRAC), s2: round2(supSaldoG * SOCIO_FRAC), s3: round2(supSaldoG * SOCIO_FRAC) }
+      planos: { saldo: planoSaldoG, s1: round2(planoSaldoG * socioFrac(0)), s2: round2(planoSaldoG * socioFrac(1)), s3: round2(planoSaldoG * socioFrac(2)) },
+      suplementos: { saldo: supSaldoG, s1: round2(supSaldoG * socioFrac(0)), s2: round2(supSaldoG * socioFrac(1)), s3: round2(supSaldoG * socioFrac(2)) }
     });
   });
 
@@ -1753,9 +1830,9 @@ window.renderAnual = function renderAnual() {
 
   const kpiC = document.getElementById('kpi-anual');
   kpiC.innerHTML = '';
-  kpiC.appendChild(kpiCard('Total Sócio 1 (33%) — acumulado', fmtBRL(as.totalS1), 'Meses fechados, Planos + Suplementos'));
-  kpiC.appendChild(kpiCard('Total Sócio 2 (33%) — acumulado', fmtBRL(as.totalS2), 'Meses fechados, Planos + Suplementos'));
-  kpiC.appendChild(kpiCard('Total Sócio 3 (33%) — acumulado', fmtBRL(as.totalS3), 'Meses fechados, Planos + Suplementos'));
+  kpiC.appendChild(kpiCard('Total ' + socioNome(0) + ' (' + socioPctTxt(0) + '%) — acumulado', fmtBRL(as.totalS1), 'Meses fechados, Planos + Suplementos'));
+  kpiC.appendChild(kpiCard('Total ' + socioNome(1) + ' (' + socioPctTxt(1) + '%) — acumulado', fmtBRL(as.totalS2), 'Meses fechados, Planos + Suplementos'));
+  kpiC.appendChild(kpiCard('Total ' + socioNome(2) + ' (' + socioPctTxt(2) + '%) — acumulado', fmtBRL(as.totalS3), 'Meses fechados, Planos + Suplementos'));
 
   const rows = as.meses.map((m, i) => {
     const p = m.planos, s = m.suplementos;
@@ -1774,7 +1851,7 @@ window.renderAnual = function renderAnual() {
     const detailRow = `<tr class="anual-detail-row" id="${rowId}" style="display:none">
       <td colspan="5">
         <table class="datatable anual-subtable">
-          <thead><tr><th>Linha</th><th class="num">Receita</th><th class="num">Despesas</th><th class="num">Saldo</th><th class="num">Sócio 1 (33%)</th><th class="num">Sócio 2 (33%)</th><th class="num">Sócio 3 (33%)</th></tr></thead>
+          <thead><tr><th>Linha</th><th class="num">Receita</th><th class="num">Despesas</th><th class="num">Saldo</th><th class="num">${socioNome(0)} (${socioPctTxt(0)}%)</th><th class="num">${socioNome(1)} (${socioPctTxt(1)}%)</th><th class="num">${socioNome(2)} (${socioPctTxt(2)}%)</th></tr></thead>
           <tbody>
             <tr><td>Planos</td><td class="num">${fmtOrDash(p.receita)}</td><td class="num">${fmtOrDash(p.despesas)}</td><td class="num">${fmtBRL(p.saldo)}</td><td class="num">${fmtBRL(p.s1)}</td><td class="num">${fmtBRL(p.s2)}</td><td class="num">${fmtBRL(p.s3)}</td></tr>
             <tr><td>Suplementos</td><td class="num">—</td><td class="num">—</td><td class="num">${fmtBRL(s.saldo)}</td><td class="num">${fmtBRL(s.s1)}</td><td class="num">${fmtBRL(s.s2)}</td><td class="num">${fmtBRL(s.s3)}</td></tr>
@@ -1787,7 +1864,7 @@ window.renderAnual = function renderAnual() {
 
   const tbl = document.getElementById('tabela-anual-resumo');
   tbl.innerHTML = `
-    <thead><tr><th>Mês</th><th class="num">Saldo total</th><th class="num">Sócio 1 (33%)</th><th class="num">Sócio 2 (33%)</th><th class="num">Sócio 3 (33%)</th></tr></thead>
+    <thead><tr><th>Mês</th><th class="num">Saldo total</th><th class="num">${socioNome(0)} (${socioPctTxt(0)}%)</th><th class="num">${socioNome(1)} (${socioPctTxt(1)}%)</th><th class="num">${socioNome(2)} (${socioPctTxt(2)}%)</th></tr></thead>
     <tbody>${rows}</tbody>`;
 
   tbl.querySelectorAll('.anual-row').forEach(row => {
@@ -2887,7 +2964,7 @@ window.initModulos = async function initModulos(){
     ['semanal','Estrutura física','Iluminação (entrada / LEDs)'],
     ['semanal','Estrutura física','Chuveiros / torneiras / bebedouros'],
     ['mensal','Fechamento do mês','Emitir notas fiscais'],
-    ['mensal','Fechamento do mês','Gerar relatório de notas para Débora']
+    ['mensal','Fechamento do mês','Gerar relatório de notas para o contador']
   ];
 
   function uid(){ return 'm' + Math.random().toString(36).slice(2,10); }
@@ -2933,7 +3010,8 @@ window.initModulos = async function initModulos(){
     contrato_atualizado_em: c.contrato_atualizado_em || '',
     aso_valido_ate: c.aso_valido_ate || '',
     da_aula: !!c.da_aula, cref: c.cref || '', cref_valido_ate: c.cref_valido_ate || '',
-    observacoes: c.observacoes || ''
+    observacoes: c.observacoes || '',
+    salario: (c.salario == null ? '' : Number(c.salario))
   }; });
 
   var r2 = await sb.from('registros_equipe').select('*').order('em', { ascending:false });
@@ -3038,6 +3116,7 @@ window.initModulos = async function initModulos(){
     var pills = [], pend = 0;
     if (c.vinculo) pills.push({ t: VINCULOS[c.vinculo] || c.vinculo, cls:'ok' });
     else { pills.push({ t:'vínculo?', cls:'' }); pend++; }
+    if (c.salario !== '' && c.salario != null && !isNaN(Number(c.salario))) pills.push({ t: 'salário ' + fmtBRL(Number(c.salario)), cls:'' });
 
     if (c.contrato_assinado) pills.push({ t:'contrato ✓' + (c.contrato_atualizado_em ? ' ' + isoParaBR(c.contrato_atualizado_em) : ''), cls:'ok' });
     else { pills.push({ t:'sem contrato', cls:'grave' }); pend++; }
@@ -3186,6 +3265,7 @@ window.initModulos = async function initModulos(){
     box.querySelectorAll('input[id^="cb-aniv-"]').forEach(function(inp){
       inp.addEventListener('input', function(){ inp.value = maskDDMM(inp.value); });
     });
+    paintCadastros();
   }
 
   async function atualizarResumoEquipe(){
@@ -3236,7 +3316,8 @@ window.initModulos = async function initModulos(){
         cargo: nd.cargo || '', vinculo: nd.vinculo || '', admissao: nd.admissao || '',
         contrato_assinado: !!nd.contrato_assinado, contrato_atualizado_em: nd.contrato_atualizado_em || '',
         aso_valido_ate: nd.aso_valido_ate || '', da_aula: !!nd.da_aula,
-        cref: nd.cref || '', cref_valido_ate: nd.cref_valido_ate || '', observacoes: nd.observacoes || ''
+        cref: nd.cref || '', cref_valido_ate: nd.cref_valido_ate || '', observacoes: nd.observacoes || '',
+        salario: (nd.salario == null ? '' : Number(nd.salario))
       });
       L.colaboradores.sort(function(a,b){ return a.nome.localeCompare(b.nome); });
       paintEquipe();
@@ -3296,6 +3377,411 @@ window.initModulos = async function initModulos(){
       paintEquipe();
       atualizarResumoEquipe();
     }
+  }
+
+  /* --------------------------- CADASTROS --------------------------- */
+  var cadEditId = null;
+
+  function nSal(v){ var x = Number(v); return (v === '' || v == null || isNaN(x)) ? 0 : x; }
+  function salTxt(v){ return (v === '' || v == null || isNaN(Number(v))) ? 'sem salário' : fmtBRL(Number(v)); }
+  function erroCad(res, acao){
+    var m = (res.error && (res.error.message || res.error.code)) || 'motivo desconhecido';
+    if (/salario/i.test(m)) m += ' — falta rodar a migração do salário no Supabase.';
+    avisar('msg-cadastros', acao + ': ' + m);
+  }
+
+  function paintCadastros(){
+    var box = document.getElementById('mod-cadastros');
+    if (!box) return;
+    var lista = L.colaboradores.slice().sort(function(a,b){ return nomeLimpo(a.nome).localeCompare(nomeLimpo(b.nome)); });
+    var folha = lista.reduce(function(a,c){ return a + nSal(c.salario); }, 0);
+    var h = '<div class="mod-bar"><span id="msg-cadastros" class="mod-msg"></span></div>';
+
+    h += '<div class="card"><h3>Funcionários</h3>';
+    h += '<div class="cardsub">Cadastre quem trabalha na academia (nome, cargo e salário). O que for cadastrado aparece automaticamente na aba Equipe.</div>';
+    h += '<datalist id="cad-cargos-list">' + CARGOS_SUGERIDOS.map(function(x){ return '<option value="' + x + '">'; }).join('') + '</datalist>';
+    h += '<div class="mod-linha" style="flex-wrap:wrap;gap:8px">';
+    h += '<input class="mod-campo" id="cad-nome" placeholder="Nome" style="flex:1;min-width:150px">';
+    h += '<input class="mod-campo" id="cad-cargo" list="cad-cargos-list" placeholder="Cargo" style="flex:1;min-width:130px">';
+    h += '<input class="mod-campo cad-sal" id="cad-sal" inputmode="numeric" placeholder="Salário (R$)" style="flex:1;min-width:130px">';
+    h += '<button class="btn-dash" id="cad-add">Adicionar</button>';
+    h += '</div>';
+
+    if (!lista.length){
+      h += '<div class="mod-vazio" style="margin-top:12px">Nenhum funcionário cadastrado ainda.</div>';
+    }
+    lista.forEach(function(c){
+      h += '<div class="colab-bloco">';
+      h += '<div class="mod-item"><span class="txt"><b>' + esc(c.nome) + '</b> <span class="mod-msg">· ' + esc(c.cargo || 'sem cargo') + '</span></span>';
+      h += '<span class="mod-tag">' + esc(salTxt(c.salario)) + '</span></div>';
+      if (cadEditId === c.id){
+        h += campoLinha('Nome', '<input class="mod-campo" id="cad-e-nome" value="' + esc(c.nome) + '" style="max-width:240px">');
+        h += campoLinha('Cargo', '<input class="mod-campo" id="cad-e-cargo" list="cad-cargos-list" value="' + esc(c.cargo) + '" style="max-width:200px">');
+        h += campoLinha('Salário (R$)', '<input class="mod-campo cad-sal" id="cad-e-sal" inputmode="numeric" value="' + esc(moneyValueToDisplayTop(c.salario)) + '" style="max-width:160px">');
+        h += '<div class="mod-linha"><button class="btn-dash" data-cad-salvar="' + c.id + '">Salvar</button> <button class="btn-dash" data-cad-cancelar="1">Cancelar</button></div>';
+      } else {
+        h += '<button class="mod-mini" data-cad-editar="' + c.id + '">editar</button> ';
+        h += '<button class="mod-mini" data-cad-remover="' + c.id + '">remover</button>';
+      }
+      h += '</div>';
+    });
+    if (lista.length){
+      h += '<div class="mod-item" style="margin-top:10px"><span class="txt"><b>Folha total (salários cadastrados)</b> <span class="mod-msg">· ' + lista.length + (lista.length === 1 ? ' funcionário' : ' funcionários') + '</span></span><span class="mod-tag">' + esc(fmtBRL(folha)) + '</span></div>';
+    }
+    h += '</div>';
+    h += cardSociosCadastro();
+    h += cardEscalaCadastro();
+    h += cardContasPagarCadastro();
+    box.innerHTML = h;
+  }
+
+  function colabDe(row){
+    return {
+      id: row.id, nome: row.nome, aniversario: row.aniversario || '',
+      cargo: row.cargo || '', vinculo: row.vinculo || '', admissao: row.admissao || '',
+      contrato_assinado: !!row.contrato_assinado, contrato_atualizado_em: row.contrato_atualizado_em || '',
+      aso_valido_ate: row.aso_valido_ate || '', da_aula: !!row.da_aula,
+      cref: row.cref || '', cref_valido_ate: row.cref_valido_ate || '', observacoes: row.observacoes || '',
+      salario: (row.salario == null ? '' : Number(row.salario))
+    };
+  }
+  function nomeJaExiste(nome, ignorarId){
+    var k = nome.toLowerCase();
+    return L.colaboradores.some(function(c){ return c.id !== ignorarId && String(c.nome).toLowerCase() === k; });
+  }
+
+  async function handlersCadastros(e){
+    var btn = e.target.closest ? e.target.closest('button') : null;
+    if (!btn) return;
+    if (await handlersCP(btn)) return;
+    if (await handlersSociosEscala(btn)) return;
+
+    if (btn.id === 'cad-add'){
+      var nome = document.getElementById('cad-nome').value.trim();
+      var cargo = document.getElementById('cad-cargo').value.trim();
+      var salTxtIn = document.getElementById('cad-sal').value.trim();
+      if (!nome){ avisar('msg-cadastros', 'Informe o nome do funcionário.'); return; }
+      if (nomeJaExiste(nome, null)){ avisar('msg-cadastros', 'Já existe um funcionário com esse nome.'); return; }
+      var novo = { id: uid(), nome: nome };
+      if (cargo) novo.cargo = cargo;
+      if (salTxtIn) novo.salario = displayToNumberTop(salTxtIn);
+      btn.disabled = true;
+      avisar('msg-cadastros', 'Salvando…');
+      var res = await sb.from('colaboradores').insert(novo).select().single();
+      btn.disabled = false;
+      if (res.error){ erroCad(res, 'Não consegui adicionar'); return; }
+      L.colaboradores.push(colabDe(res.data));
+      L.colaboradores.sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+      paintEquipe();
+      avisar('msg-cadastros', 'Funcionário adicionado — já aparece na aba Equipe.');
+      return;
+    }
+
+    var ed = btn.getAttribute('data-cad-editar');
+    if (ed){ cadEditId = ed; paintCadastros(); return; }
+    if (btn.getAttribute('data-cad-cancelar')){ cadEditId = null; paintCadastros(); return; }
+
+    var sv = btn.getAttribute('data-cad-salvar');
+    if (sv){
+      var colab = L.colaboradores.filter(function(c){ return c.id === sv; })[0];
+      if (!colab) return;
+      var nNome = document.getElementById('cad-e-nome').value.trim();
+      var nCargo = document.getElementById('cad-e-cargo').value.trim();
+      var nSalIn = document.getElementById('cad-e-sal').value.trim();
+      if (!nNome){ avisar('msg-cadastros', 'O nome não pode ficar vazio.'); return; }
+      if (nomeJaExiste(nNome, sv)){ avisar('msg-cadastros', 'Já existe um funcionário com esse nome.'); return; }
+      var patch = { nome: nNome, cargo: nCargo || null, salario: nSalIn ? displayToNumberTop(nSalIn) : null };
+      btn.disabled = true;
+      avisar('msg-cadastros', 'Salvando…');
+      var res2 = await sb.from('colaboradores').update(patch).eq('id', sv);
+      if (res2.error){ btn.disabled = false; erroCad(res2, 'Não consegui salvar'); return; }
+      if (nNome !== colab.nome){
+        var velho = colab.nome;
+        await sb.from('registros_equipe').update({ colaborador: nNome }).eq('colaborador', velho);
+        L.registrosEquipe.forEach(function(r){ if (r.colaborador === velho) r.colaborador = nNome; });
+        var mudouEsc = false;
+        escCfg.bloqueados = escCfg.bloqueados.map(function(x){ if (x === velho){ mudouEsc = true; return nNome; } return x; });
+        escCfg.ciclo.forEach(function(x){ if (x.recepcao === velho){ x.recepcao = nNome; mudouEsc = true; } if (x.personal === velho){ x.personal = nNome; mudouEsc = true; } });
+        if (mudouEsc) await sb.from('escala_config').upsert({ id: 1, ciclo_sabado: escCfg.ciclo, personal_feriado_bloqueado: escCfg.bloqueados, atualizado_em: new Date().toISOString() });
+      }
+      colab.nome = nNome; colab.cargo = nCargo; colab.salario = nSalIn ? displayToNumberTop(nSalIn) : '';
+      L.colaboradores.sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+      cadEditId = null;
+      paintEquipe();
+      avisar('msg-cadastros', 'Salvo — já aparece na aba Equipe.');
+      return;
+    }
+
+    var rm = btn.getAttribute('data-cad-remover');
+    if (rm){
+      var alvo = L.colaboradores.filter(function(c){ return c.id === rm; })[0];
+      if (!alvo) return;
+      if (!window.confirm('Remover "' + alvo.nome + '" do cadastro? Ele sai da aba Equipe e os registros dele deixam de aparecer.')) return;
+      var res3 = await sb.from('colaboradores').delete().eq('id', rm);
+      if (res3.error){ erroCad(res3, 'Não consegui remover'); return; }
+      L.colaboradores = L.colaboradores.filter(function(c){ return c.id !== rm; });
+      if (cadEditId === rm) cadEditId = null;
+      paintEquipe();
+      avisar('msg-cadastros', 'Funcionário removido.');
+    }
+  }
+
+  /* ------------- CADASTROS: sócios e regras da escala ------------- */
+  var escCfg = { ciclo: [], bloqueados: [], erro: '' };
+  async function carregarEscCfg(){
+    escCfg.erro = '';
+    try{
+      var r = await sb.from('escala_config').select('*').eq('id', 1).maybeSingle();
+      if (r.error) throw r.error;
+      var d = r.data || {};
+      escCfg.ciclo = (d.ciclo_sabado || []).map(function(x){ return { recepcao: x.recepcao || '', personal: x.personal || '' }; });
+      escCfg.bloqueados = (d.personal_feriado_bloqueado || []).slice();
+    }catch(e){ escCfg.erro = (e && (e.message || e.code)) || 'erro desconhecido'; }
+  }
+  function pctInput(v){ return String(Math.round((Number(v) || 0) * 100) / 100).replace('.', ','); }
+
+  function cardSociosCadastro(){
+    var soma = SOCIOS_CFG.reduce(function(a,x){ return a + (Number(x.pct) || 0); }, 0);
+    var h = '<div class="card"><h3>Sócios e divisão do lucro</h3>';
+    h += '<div class="cardsub">Nome e percentual de cada sócio. Os percentuais precisam somar 100%. Valem para a Gerencial, a aba Anual e o resumo dos sócios.</div>';
+    if (window.__sociosErro){
+      h += '<div class="mod-aviso alerta">Não consegui carregar do banco (' + esc(window.__sociosErro) + '). Rode a migração 004 no Supabase; enquanto isso a divisão é em partes iguais e não salva.</div>';
+    }
+    SOCIOS_CFG.forEach(function(x, i){
+      h += '<div class="mod-linha" style="flex-wrap:wrap;gap:8px;align-items:center">';
+      h += '<span class="mod-msg" style="min-width:64px">Sócio ' + (i + 1) + '</span>';
+      h += '<input class="mod-campo" id="soc-n-' + i + '" placeholder="Nome" value="' + esc(x.nome) + '" style="flex:1;min-width:150px">';
+      h += '<input class="mod-campo" id="soc-p-' + i + '" inputmode="decimal" value="' + esc(pctInput(x.pct)) + '" style="max-width:90px"><span class="mod-msg">%</span>';
+      h += '</div>';
+    });
+    h += '<div class="mod-linha" style="align-items:center;gap:10px"><button class="btn-dash" id="soc-salvar">Salvar sócios</button>';
+    h += '<span class="mod-msg">Soma atual: ' + esc(pctInput(soma)) + '%</span></div>';
+    h += '</div>';
+    return h;
+  }
+
+  function cardEscalaCadastro(){
+    var h = '<div class="card"><h3>Escala — regras</h3>';
+    h += '<div class="cardsub">Quem não trabalha em feriado e o rodízio sugerido de sábados. A escala de cada mês continua sendo montada e salva na aba Escala.</div>';
+    if (escCfg.erro) h += '<div class="mod-aviso alerta">Não consegui carregar as regras (' + esc(escCfg.erro) + ').</div>';
+    h += '<div class="mod-setor">Não trabalham em feriado</div>';
+    if (!L.colaboradores.length) h += '<div class="mod-vazio">Cadastre os funcionários primeiro.</div>';
+    L.colaboradores.forEach(function(c){
+      h += '<label class="colab-chk"><input type="checkbox" data-esc-bloq="' + esc(c.nome) + '"' + (escCfg.bloqueados.indexOf(c.nome) !== -1 ? ' checked' : '') + '> ' + esc(nomeLimpo(c.nome)) + '</label>';
+    });
+    h += '<div class="mod-setor">Rodízio de sábados</div>';
+    h += '<div class="cardsub">A linha 1 vale para o 1º sábado do mês, a linha 2 para o 2º, e assim por diante. Se o mês tiver mais sábados que linhas, o rodízio recomeça.</div>';
+    function opts(sel){
+      return '<option value="">—</option>' + L.colaboradores.map(function(c){ return '<option value="' + esc(c.nome) + '"' + (sel === c.nome ? ' selected' : '') + '>' + esc(nomeLimpo(c.nome)) + '</option>'; }).join('');
+    }
+    escCfg.ciclo.forEach(function(x, i){
+      h += '<div class="mod-linha" style="flex-wrap:wrap;gap:8px;align-items:center">';
+      h += '<span class="mod-msg" style="min-width:64px">Sábado ' + (i + 1) + '</span>';
+      h += '<select class="mod-campo" data-esc-rec="' + i + '" style="flex:1;min-width:130px">' + opts(x.recepcao) + '</select>';
+      h += '<select class="mod-campo" data-esc-sal="' + i + '" style="flex:1;min-width:130px">' + opts(x.personal) + '</select>';
+      h += '<button class="mod-mini" data-esc-rm="' + i + '">remover</button></div>';
+    });
+    if (escCfg.ciclo.length) h += '<div class="mod-linha"><span class="mod-msg" style="min-width:64px"></span><span class="mod-msg" style="flex:1">Recepção</span><span class="mod-msg" style="flex:1">Salão</span></div>';
+    h += '<div class="mod-linha" style="gap:8px"><button class="btn-dash" data-esc-add="1">Adicionar sábado</button> <button class="btn-dash" id="esc-salvar-cfg">Salvar regras da escala</button></div>';
+    h += '</div>';
+    return h;
+  }
+
+  async function handlersSociosEscala(btn){
+    if (btn.id === 'soc-salvar'){
+      var novos = [], soma = 0;
+      for (var i = 0; i < 3; i++){
+        var nome = document.getElementById('soc-n-' + i).value.trim();
+        var pct = parseFloat(String(document.getElementById('soc-p-' + i).value).replace(',', '.'));
+        if (!nome){ avisar('msg-cadastros', 'Informe o nome do sócio ' + (i + 1) + '.'); return true; }
+        if (isNaN(pct) || pct < 0){ avisar('msg-cadastros', 'Percentual inválido no sócio ' + (i + 1) + '.'); return true; }
+        novos.push({ nome: nome, pct: pct }); soma += pct;
+      }
+      if (Math.abs(soma - 100) > 0.05){ avisar('msg-cadastros', 'Os percentuais precisam somar 100% (agora somam ' + pctInput(soma) + '%).'); return true; }
+      btn.disabled = true; avisar('msg-cadastros', 'Salvando…');
+      var res = await sb.from('socios_config').upsert({ id: 1, dados: novos, atualizado_em: new Date().toISOString() });
+      btn.disabled = false;
+      if (res.error){
+        var m = res.error.message || res.error.code || 'motivo desconhecido';
+        if (/socios_config|schema cache|does not exist/i.test(m)) m += ' — falta rodar a migração 004 no Supabase.';
+        avisar('msg-cadastros', 'Não consegui salvar: ' + m); return true;
+      }
+      SOCIOS_CFG = novos; window.__sociosErro = '';
+      paintCadastros();
+      if (window.renderAnual) window.renderAnual();
+      if (window.setMesGerencial) window.setMesGerencial(window.mesGlobal);
+      if (window.atualizarResumoGerencialTodos) window.atualizarResumoGerencialTodos();
+      if (window.atualizarResumoFinanceiro) window.atualizarResumoFinanceiro();
+      avisar('msg-cadastros', 'Sócios salvos. Os meses já fechados foram recalculados com os novos percentuais.');
+      return true;
+    }
+
+    if (btn.getAttribute('data-esc-add')){ escCfg.ciclo.push({ recepcao: '', personal: '' }); paintCadastros(); return true; }
+    var rmI = btn.getAttribute('data-esc-rm');
+    if (rmI !== null){ escCfg.ciclo.splice(+rmI, 1); paintCadastros(); return true; }
+
+    if (btn.id === 'esc-salvar-cfg'){
+      btn.disabled = true; avisar('msg-cadastros', 'Salvando…');
+      var r2 = await sb.from('escala_config').upsert({ id: 1, ciclo_sabado: escCfg.ciclo, personal_feriado_bloqueado: escCfg.bloqueados, atualizado_em: new Date().toISOString() });
+      btn.disabled = false;
+      if (r2.error){ avisar('msg-cadastros', 'Não consegui salvar as regras: ' + (r2.error.message || r2.error.code || 'motivo desconhecido')); return true; }
+      if (window.recarregarEscalaConfig) await window.recarregarEscalaConfig();
+      avisar('msg-cadastros', 'Regras da escala salvas.');
+      return true;
+    }
+    return false;
+  }
+
+  /* ------------- CADASTROS: contas a pagar (itens e valores planejados) ------------- */
+  var cpEditId = null;
+  function cpMsg(t){ avisar('msg-cadastros', t); }
+  function cpErro(res, acao){
+    var m = (res.error && (res.error.message || res.error.code)) || 'motivo desconhecido';
+    if (/contas_pagar_(itens|grupos)|schema cache|does not exist/i.test(m)) m += ' — falta rodar a migração 003 no Supabase.';
+    cpMsg(acao + ': ' + m);
+  }
+  function cpRefresh(){
+    aplicarOrcamentoContasPagar();
+    paintCadastros();
+    if (window.renderContasPagar) window.renderContasPagar();
+    if (window.repaintInicio) window.repaintInicio();
+    if (window.atualizarResumoFinanceiro) window.atualizarResumoFinanceiro();
+  }
+  async function cpSalvarDia(nome, dia){
+    window.vencimentosPorItem = window.vencimentosPorItem || {};
+    if (dia === null) delete window.vencimentosPorItem[nome]; else window.vencimentosPorItem[nome] = dia;
+    var r = await sb.from('contas_pagar_vencimentos').upsert({ item_nome: nome, dia_vencimento: dia });
+    if (r.error) cpErro(r, 'Não consegui salvar o dia de vencimento');
+  }
+  function cpNomeExiste(nome, ignorarId){
+    var k = nome.toLowerCase();
+    return CP_ITENS_DB.some(function(r){ return r.id !== ignorarId && String(r.nome).toLowerCase() === k; });
+  }
+  function cardContasPagarCadastro(){
+    var h = '<div class="card"><h3>Contas a pagar — itens e valores planejados</h3>';
+    h += '<div class="cardsub">Os grupos são fixos. Dentro de cada um, cadastre os itens e o valor planejado por mês. Aparecem na aba Contas a Pagar (Caixa &gt; Contas).</div>';
+    if (window.__cpOrcamentoErro){
+      h += '<div class="mod-aviso alerta">Não consegui carregar do banco (' + esc(window.__cpOrcamentoErro) + '). Rode a migração 003 no Supabase; enquanto isso a tela usa os itens de modelo e não salva alterações.</div>';
+    }
+    GRUPOS_CP.forEach(function(g, gi){
+      var itens = CP_ITENS_DB.filter(function(r){ return r.grupo === g; }).sort(function(a,b){ return (a.ordem||0) - (b.ordem||0); });
+      var tot = itens.length ? itens.reduce(function(a,r){ return a + nSal(r.planejado); }, 0) : nSal(CP_GRUPOS_DB[g]);
+      h += '<div class="mod-setor">' + esc(g) + ' <span class="mod-msg">· ' + esc(fmtBRL(tot)) + '</span></div>';
+      itens.forEach(function(r){
+        h += '<div class="colab-bloco">';
+        var diaV = window.vencimentosPorItem ? window.vencimentosPorItem[r.nome] : null;
+        h += '<div class="mod-item"><span class="txt">' + esc(r.nome) + (diaV ? ' <span class="mod-msg">· vence dia ' + esc(diaV) + '</span>' : '') + '</span><span class="mod-tag">' + esc(fmtBRL(nSal(r.planejado))) + '</span></div>';
+        if (cpEditId === r.id){
+          h += campoLinha('Item', '<input class="mod-campo" id="cp-e-nome" value="' + esc(r.nome) + '" style="max-width:260px">');
+          h += campoLinha('Valor planejado (R$)', '<input class="mod-campo cad-sal" id="cp-e-val" inputmode="numeric" value="' + esc(moneyValueToDisplayTop(r.planejado)) + '" style="max-width:160px">');
+          h += campoLinha('Dia de vencimento (1 a 31)', '<input class="mod-campo" id="cp-e-dia" inputmode="numeric" maxlength="2" value="' + esc(diaV || '') + '" style="max-width:90px">');
+          h += '<div class="mod-linha"><button class="btn-dash" data-cp-salvar="' + r.id + '">Salvar</button> <button class="btn-dash" data-cp-cancelar="1">Cancelar</button></div>';
+        } else {
+          h += '<button class="mod-mini" data-cp-editar="' + r.id + '">editar</button> <button class="mod-mini" data-cp-remover="' + r.id + '">remover</button>';
+        }
+        h += '</div>';
+      });
+      if (!itens.length){
+        h += '<div class="mod-linha" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="mod-msg">Sem itens — orçamento do grupo:</span>';
+        h += '<input class="mod-campo cad-sal" id="cp-g-' + gi + '" inputmode="numeric" value="' + esc(moneyValueToDisplayTop(CP_GRUPOS_DB[g])) + '" style="max-width:140px">';
+        h += '<button class="mod-mini" data-cp-grupo="' + gi + '">salvar orçamento</button></div>';
+      }
+      h += '<div class="mod-linha" style="flex-wrap:wrap;gap:8px;margin-bottom:8px">';
+      h += '<input class="mod-campo" id="cp-n-' + gi + '" placeholder="Novo item" style="flex:1;min-width:150px">';
+      h += '<input class="mod-campo cad-sal" id="cp-v-' + gi + '" inputmode="numeric" placeholder="Valor (R$)" style="flex:1;min-width:110px;max-width:160px">';
+      h += '<input class="mod-campo" id="cp-d-' + gi + '" inputmode="numeric" maxlength="2" placeholder="Dia (1-31)" style="max-width:100px">';
+      h += '<button class="btn-dash" data-cp-add="' + gi + '">Adicionar</button></div>';
+    });
+    h += '</div>';
+    return h;
+  }
+
+  async function handlersCP(btn){
+    var gi = btn.getAttribute('data-cp-add');
+    if (gi !== null){
+      var grupo = GRUPOS_CP[+gi];
+      var nome = document.getElementById('cp-n-' + gi).value.trim();
+      var vTxt = document.getElementById('cp-v-' + gi).value.trim();
+      var dAddTxt = document.getElementById('cp-d-' + gi).value.trim();
+      var dAdd = dAddTxt ? parseInt(dAddTxt, 10) : null;
+      if (dAdd !== null && (isNaN(dAdd) || dAdd < 1 || dAdd > 31)){ cpMsg('O dia de vencimento deve ser de 1 a 31.'); return true; }
+      if (!nome){ cpMsg('Informe o nome do item.'); return true; }
+      if (cpNomeExiste(nome, null)){ cpMsg('Já existe um item com esse nome.'); return true; }
+      var ordem = CP_ITENS_DB.filter(function(r){ return r.grupo === grupo; }).reduce(function(a,r){ return Math.max(a, r.ordem || 0); }, 0) + 1;
+      var linha = { id: uid(), grupo: grupo, nome: nome, planejado: vTxt ? displayToNumberTop(vTxt) : 0, ordem: ordem };
+      btn.disabled = true; cpMsg('Salvando…');
+      var res = await sb.from('contas_pagar_itens').insert(linha);
+      btn.disabled = false;
+      if (res.error){ cpErro(res, 'Não consegui adicionar'); return true; }
+      CP_ITENS_DB.push(linha);
+      if (dAdd !== null) await cpSalvarDia(nome, dAdd);
+      cpRefresh(); cpMsg('Item adicionado.');
+      return true;
+    }
+    var ed = btn.getAttribute('data-cp-editar');
+    if (ed){ cpEditId = ed; paintCadastros(); return true; }
+    if (btn.getAttribute('data-cp-cancelar')){ cpEditId = null; paintCadastros(); return true; }
+
+    var sv = btn.getAttribute('data-cp-salvar');
+    if (sv){
+      var row = CP_ITENS_DB.filter(function(r){ return r.id === sv; })[0];
+      if (!row) return true;
+      var nNome = document.getElementById('cp-e-nome').value.trim();
+      var nVal = document.getElementById('cp-e-val').value.trim();
+      var dTxt = document.getElementById('cp-e-dia').value.trim();
+      var dNum = dTxt ? parseInt(dTxt, 10) : null;
+      if (dNum !== null && (isNaN(dNum) || dNum < 1 || dNum > 31)){ cpMsg('O dia de vencimento deve ser de 1 a 31.'); return true; }
+      if (!nNome){ cpMsg('O nome do item não pode ficar vazio.'); return true; }
+      if (cpNomeExiste(nNome, sv)){ cpMsg('Já existe um item com esse nome.'); return true; }
+      var novoVal = nVal ? displayToNumberTop(nVal) : 0;
+      btn.disabled = true; cpMsg('Salvando…');
+      var res2 = await sb.from('contas_pagar_itens').update({ nome: nNome, planejado: novoVal }).eq('id', sv);
+      if (res2.error){ btn.disabled = false; cpErro(res2, 'Não consegui salvar'); return true; }
+      if (nNome !== row.nome){
+        var velho = row.nome;
+        await sb.from('contas_pagar_vencimentos').update({ item_nome: nNome }).eq('item_nome', velho);
+        await sb.from('contas_pagar_status').update({ item_nome: nNome }).eq('item_nome', velho);
+        if (window.vencimentosPorItem && Object.prototype.hasOwnProperty.call(window.vencimentosPorItem, velho)){
+          window.vencimentosPorItem[nNome] = window.vencimentosPorItem[velho]; delete window.vencimentosPorItem[velho];
+        }
+        var st = window.statusContasPagarPorMes || {};
+        Object.keys(st).forEach(function(ym){ if (st[ym] && st[ym][velho]){ st[ym][nNome] = st[ym][velho]; delete st[ym][velho]; } });
+      }
+      row.nome = nNome; row.planejado = novoVal;
+      var diaAntes = window.vencimentosPorItem ? window.vencimentosPorItem[nNome] : null;
+      if ((diaAntes || null) !== dNum) await cpSalvarDia(nNome, dNum);
+      cpEditId = null;
+      cpRefresh(); cpMsg('Salvo.');
+      return true;
+    }
+
+    var rm = btn.getAttribute('data-cp-remover');
+    if (rm){
+      var alvo = CP_ITENS_DB.filter(function(r){ return r.id === rm; })[0];
+      if (!alvo) return true;
+      if (!window.confirm('Remover o item "' + alvo.nome + '" das contas a pagar?')) return true;
+      var res3 = await sb.from('contas_pagar_itens').delete().eq('id', rm);
+      if (res3.error){ cpErro(res3, 'Não consegui remover'); return true; }
+      CP_ITENS_DB = CP_ITENS_DB.filter(function(r){ return r.id !== rm; });
+      if (cpEditId === rm) cpEditId = null;
+      cpRefresh(); cpMsg('Item removido.');
+      return true;
+    }
+
+    var gg = btn.getAttribute('data-cp-grupo');
+    if (gg !== null){
+      var gnome = GRUPOS_CP[+gg];
+      var gTxt = document.getElementById('cp-g-' + gg).value.trim();
+      var gval = gTxt ? displayToNumberTop(gTxt) : 0;
+      btn.disabled = true; cpMsg('Salvando…');
+      var res4 = await sb.from('contas_pagar_grupos').update({ planejado: gval }).eq('grupo', gnome);
+      btn.disabled = false;
+      if (res4.error){ cpErro(res4, 'Não consegui salvar o orçamento'); return true; }
+      CP_GRUPOS_DB[gnome] = gval;
+      cpRefresh(); cpMsg('Orçamento do grupo salvo.');
+      return true;
+    }
+    return false;
   }
 
   /* --------------------------- CHECKLIST --------------------------- */
@@ -3563,7 +4049,25 @@ window.initModulos = async function initModulos(){
   var be = document.getElementById('mod-equipe');
   var bc = document.getElementById('mod-checklist');
   var bv = document.getElementById('mod-validade');
+  await carregarEscCfg();
+  var bcad = document.getElementById('mod-cadastros');
+  if (bcad){
+    bcad.addEventListener('click', handlersCadastros);
+    bcad.addEventListener('change', function(e){
+      var t = e.target; if (!t || !t.getAttribute) return;
+      var rec = t.getAttribute('data-esc-rec'), sal = t.getAttribute('data-esc-sal'), bq = t.getAttribute('data-esc-bloq');
+      if (rec !== null) escCfg.ciclo[+rec].recepcao = t.value;
+      else if (sal !== null) escCfg.ciclo[+sal].personal = t.value;
+      else if (bq !== null){
+        var ix = escCfg.bloqueados.indexOf(bq);
+        if (t.checked && ix === -1) escCfg.bloqueados.push(bq);
+        if (!t.checked && ix !== -1) escCfg.bloqueados.splice(ix, 1);
+      }
+    });
+    bcad.addEventListener('input', function(e){ if (e.target && e.target.classList && e.target.classList.contains('cad-sal')) onMoneyInputTop(e); });
+  }
   if (be){ be.addEventListener('click', handlersEquipe); paintEquipe(); }
+  else paintCadastros();
   if (bc){
     bc.addEventListener('change', handlersChecklist);
     bc.addEventListener('click', handlersChecklist);
@@ -3579,6 +4083,7 @@ window.initModulos = async function initModulos(){
     paintValidade();
   }
 
+  window.repaintCadastros = paintCadastros;
   window.contagemChecklistAtual = contagemChecklist;
   window.registrosEquipeMesAtual = function(){
     var mes = hojeISO().slice(0,7);
@@ -3961,6 +4466,8 @@ window.initMenu = function initMenu(){
     mostrarApp();
     try{
       await window.initFinanceiro();
+      if (window.initOrcamentoContasPagar) await window.initOrcamentoContasPagar();
+      if (window.initSociosConfig) await window.initSociosConfig();
       await window.initSaldoOnline();
       if (window.renderDiaria) window.renderDiaria();
       if (window.renderContasPagar) window.renderContasPagar();
@@ -3981,6 +4488,7 @@ window.initMenu = function initMenu(){
         var mapVenc = {};
         (rVenc.data||[]).forEach(function(r){ mapVenc[r.item_nome] = r.dia_vencimento; });
         window.vencimentosPorItem = mapVenc;
+        if (window.repaintCadastros) window.repaintCadastros();
         var ymAtualCp = window.mesGlobal || todayISOTop().slice(0,7);
         var ymRealCp = todayISOTop().slice(0,7);
         if (window.carregarStatusContasPagar){
@@ -4381,7 +4889,7 @@ window.initGerencial = async function initGerencial(){
     var soma = n(d.crediario) + n(d.cartao) + n(d.dinheiro_pix);
     var margemComR = soma - n(d.custo_venda);
     var margemComP = soma ? margemComR / soma : null;
-    var supS1 = margemComR * SOCIO_FRAC, supS2 = margemComR * SOCIO_FRAC, supS3 = margemComR * SOCIO_FRAC;
+    var supS1 = margemComR * socioFrac(0), supS2 = margemComR * socioFrac(1), supS3 = margemComR * socioFrac(2);
     var diferencaVendaBruta = n(d.venda_bruta) - soma;
     var entradaReal = entradaRealSuplementos(ym);
     var saldoConta = n(d.saldo_mes_passado) + entradaReal - n(d.compras_mes) - supS1 - supS2 - supS3;
@@ -4392,7 +4900,7 @@ window.initGerencial = async function initGerencial(){
     var despesasReal = despesasRealDoMes(ym);
     var nf = notaFiscalAEmitir(ym, d.nf_nexfitpay, d.nf_notas_planos, d.nf_notas_suplementos);
     var saldoPlanos = receitasPlanos - despesasReal;
-    var planosS1 = saldoPlanos * SOCIO_FRAC, planosS2 = saldoPlanos * SOCIO_FRAC, planosS3 = saldoPlanos * SOCIO_FRAC;
+    var planosS1 = saldoPlanos * socioFrac(0), planosS2 = saldoPlanos * socioFrac(1), planosS3 = saldoPlanos * socioFrac(2);
     var geralS1 = planosS1 + supS1, geralS2 = planosS2 + supS2, geralS3 = planosS3 + supS3;
     return {
       soma: soma, margemComR: margemComR, margemComP: margemComP, diferencaVendaBruta: diferencaVendaBruta,
@@ -4451,9 +4959,9 @@ window.initGerencial = async function initGerencial(){
     h += campo('ger-custo', 'Custo venda', dados.custo_venda);
     h += '</div>';
     h += '<div class="mod-item"><span class="txt">Margem comercial</span><span class="mod-tag' + (c.margemComR>=0?' ok':' grave') + '">' + brl(c.margemComR) + ' · ' + pct(c.margemComP) + '</span></div>';
-    h += '<div class="mod-item"><span class="txt">33% Sócio 1</span><span class="mod-tag">' + brl(c.supS1) + '</span></div>';
-    h += '<div class="mod-item"><span class="txt">33% Sócio 2</span><span class="mod-tag">' + brl(c.supS2) + '</span></div>';
-    h += '<div class="mod-item"><span class="txt">33% Sócio 3</span><span class="mod-tag">' + brl(c.supS3) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">' + socioRot(0) + '</span><span class="mod-tag">' + brl(c.supS1) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">' + socioRot(1) + '</span><span class="mod-tag">' + brl(c.supS2) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">' + socioRot(2) + '</span><span class="mod-tag">' + brl(c.supS3) + '</span></div>';
     h += '</div>';
 
     h += '<div class="card"><h3>Saldo Suplemento</h3>';
@@ -4462,7 +4970,7 @@ window.initGerencial = async function initGerencial(){
     h += '<div class="mod-item"><span class="txt">Entrada desse mês (caixa real)</span><span class="mod-tag">' + brl(c.entradaReal) + '</span></div>';
     h += campo('ger-compras', 'Compras desse mês', dados.compras_mes);
     h += '<div class="mod-item"><span class="txt">Saída — compras desse mês</span><span class="mod-tag grave">-' + brl(n(dados.compras_mes)) + '</span></div>';
-    h += '<div class="mod-item"><span class="txt">Participação dos 3 sócios (33% cada)</span><span class="mod-tag">' + brl(c.supS1 + c.supS2 + c.supS3) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">Participação dos sócios</span><span class="mod-tag">' + brl(c.supS1 + c.supS2 + c.supS3) + '</span></div>';
     h += '<div class="mod-item"><span class="txt"><b>Saldo em conta</b></span><span class="mod-tag' + (c.saldoConta>=0?' ok':' grave') + '"><b>' + brl(c.saldoConta) + '</b></span></div>';
     h += '</div>';
 
@@ -4500,9 +5008,9 @@ window.initGerencial = async function initGerencial(){
     h += '<div class="mod-item"><span class="txt">Receitas</span><span class="mod-tag">' + brl(c.receitasPlanos) + '</span></div>';
     h += '<div class="mod-item"><span class="txt">Despesas pagas (Lançamento)</span><span class="mod-tag">' + brl(c.despesasReal) + '</span></div>';
     h += '<div class="mod-item"><span class="txt"><b>Saldo</b></span><span class="mod-tag' + (c.saldoPlanos>=0?' ok':' grave') + '"><b>' + brl(c.saldoPlanos) + '</b></span></div>';
-    h += '<div class="mod-item"><span class="txt">33% Sócio 1</span><span class="mod-tag">' + brl(c.planosS1) + '</span></div>';
-    h += '<div class="mod-item"><span class="txt">33% Sócio 2</span><span class="mod-tag">' + brl(c.planosS2) + '</span></div>';
-    h += '<div class="mod-item"><span class="txt">33% Sócio 3</span><span class="mod-tag">' + brl(c.planosS3) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">' + socioRot(0) + '</span><span class="mod-tag">' + brl(c.planosS1) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">' + socioRot(1) + '</span><span class="mod-tag">' + brl(c.planosS2) + '</span></div>';
+    h += '<div class="mod-item"><span class="txt">' + socioRot(2) + '</span><span class="mod-tag">' + brl(c.planosS3) + '</span></div>';
     h += '</div>';
 
     h += '<div class="card"><h3>Nota fiscal a emitir</h3>';
@@ -4520,9 +5028,9 @@ window.initGerencial = async function initGerencial(){
 
     h += '<div class="card"><h3>Geral — divisão da sociedade</h3>';
     h += '<div class="kpis">';
-    h += '<div class="kpi"><h4>33% Sócio 1</h4><div class="v">' + brl(c.geralS1) + '</div></div>';
-    h += '<div class="kpi"><h4>33% Sócio 2</h4><div class="v">' + brl(c.geralS2) + '</div></div>';
-    h += '<div class="kpi"><h4>33% Sócio 3</h4><div class="v">' + brl(c.geralS3) + '</div></div>';
+    h += '<div class="kpi"><h4>' + socioRot(0) + '</h4><div class="v">' + brl(c.geralS1) + '</div></div>';
+    h += '<div class="kpi"><h4>' + socioRot(1) + '</h4><div class="v">' + brl(c.geralS2) + '</div></div>';
+    h += '<div class="kpi"><h4>' + socioRot(2) + '</h4><div class="v">' + brl(c.geralS3) + '</div></div>';
     h += '</div></div>';
 
     h += '<div class="mod-linha" style="margin:14px 0 30px"><button class="btn-dash" id="ger-salvar">Salvar mês</button></div>';
@@ -4657,6 +5165,7 @@ window.initGerencial = async function initGerencial(){
       // só aparecia lá depois de algum lançamento mexer em atualizarResumoFinanceiro.
       if (typeof DATA !== 'undefined' && DATA.anual_socios){
         rdados.anual_mensal = { meses: DATA.anual_socios.meses, totalS1: DATA.anual_socios.totalS1, totalS2: DATA.anual_socios.totalS2, totalS3: DATA.anual_socios.totalS3 };
+        rdados.socios = sociosExport();
       }
       var res2 = await sb.from('resumo_cache').update({ dados: rdados, atualizado_em: new Date().toISOString() }).eq('id',1);
       return !res2.error;
@@ -5074,6 +5583,16 @@ window.initEscala = async function initEscala(){
 
   window.setMesEscala = async function(ym){ mesSel = ym; dadosMes = await carregarMes(mesSel); render(); };
 
+  window.recarregarEscalaConfig = async function(){
+    var r = await sb.from('escala_config').select('*').eq('id',1).maybeSingle();
+    config = r.data || { ciclo_sabado: [], personal_feriado_bloqueado: [] };
+    colaboradores = ((typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.colaboradores) ? LANCAMENTOS.colaboradores : [])
+      .map(function(c){ return c.nome; });
+    opcoesFeriado = colaboradores.filter(function(nome){ return config.personal_feriado_bloqueado.indexOf(nome) === -1; });
+    dadosMes = await carregarMes(mesSel);
+    render();
+  };
+
   // ---- indicador para o card do Início: próximo feriado sem escala definida ----
   window.proximoFeriadoPendente = async function(){
     var hoje = new Date(); hoje.setHours(0,0,0,0);
@@ -5435,14 +5954,16 @@ window.initPreventivo = async function initPreventivo(){
       { id:'caixa',     label:'Caixa',     views:['lancamento','conciliacao','contaspagar'],  subs:['Lançar','Conferir','Contas'] },
       { id:'operacao',  label:'Operação',  views:['checklist','validade','escala','documentacao','preventivo'], subs:['Checklist','Validade','Escala','Documentação','Preventivo'] },
       { id:'equipe',    label:'Equipe',    views:['equipe','satisfacao'],                     subs:['Equipe','Satisfação'] },
-      { id:'resultado', label:'Resultado', views:['gerencial','anual'],                       subs:['Gerencial','Anual'] }
+      { id:'resultado', label:'Resultado', views:['gerencial','anual'],                       subs:['Gerencial','Anual'] },
+      { id:'cadastros', label:'Cadastros', views:['cadastros'],                               subs:[] }
     ];
     var ICON = {
       hoje:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
       caixa:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M16 14h2"/>',
       operacao:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
       equipe:'<circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.6-3.2 3-5 5.5-5s4.9 1.8 5.5 5"/><path d="M17 6.5a3 3 0 0 1 0 5.8"/><path d="M18.5 20c-.3-2-1-3.4-2-4.4"/>',
-      resultado:'<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>'
+      resultado:'<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>',
+      cadastros:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>'
     };
     function svg(id){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ICON[id] + '</svg>'; }
 
