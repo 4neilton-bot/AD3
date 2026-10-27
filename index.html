@@ -339,6 +339,13 @@
   .mod-item input[type=checkbox] { margin-top:3px; width:18px; height:18px; flex:none; }
   .mod-item.feito span.txt { text-decoration:line-through; color: var(--muted); }
   .mod-setor { font-size:11px; letter-spacing:.1em; text-transform:uppercase; color: var(--muted); margin:14px 0 6px; }
+  .viz-root .cp-grupo { border: 1px solid var(--grid); border-radius: 10px; margin: 18px 0 0; overflow: hidden; background: var(--surface-1); }
+  .viz-root .cp-grupo-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding: 11px 14px; background: var(--surface-2); border-left: 5px solid #c0c642; border-bottom: 1px solid var(--grid); }
+  .viz-root .cp-grupo-nome { font-size: 14px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-primary); }
+  .viz-root .cp-grupo-nome small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .viz-root .cp-grupo-tot { font-size: 13px; font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+  .viz-root .cp-grupo-corpo { padding: 2px 14px 12px; }
+  .viz-root .cp-grupo-corpo .colab-bloco:first-child { border-top: 0; }
   .mod-tag { font-size:11px; padding:2px 7px; border-radius:6px; background:rgba(192,198,66,.14); color:#C2410C; margin-left:auto; flex:none; white-space:nowrap; }
   .mod-tag.ok { background:rgba(16,122,87,.14); color:#0F7A57; }
   .mod-tag.grave { background:rgba(190,32,32,.14); color:#BE2020; }
@@ -3804,7 +3811,7 @@ window.initModulos = async function initModulos(){
     GRUPOS_CP.forEach(function(g, gi){
       var itens = CP_ITENS_DB.filter(function(r){ return r.grupo === g; }).sort(function(a,b){ return (a.ordem||0) - (b.ordem||0); });
       var tot = itens.length ? itens.reduce(function(a,r){ return a + nSal(r.planejado); }, 0) : nSal(CP_GRUPOS_DB[g]);
-      h += '<div class="mod-setor">' + esc(g) + ' <span class="mod-msg">· ' + esc(fmtBRL(tot)) + '</span></div>';
+      h += '<div class="cp-grupo"><div class="cp-grupo-head"><span class="cp-grupo-nome">' + esc(g) + '<small>' + itens.length + (itens.length === 1 ? ' item' : ' itens') + '</small></span><span class="cp-grupo-tot">' + esc(fmtBRL(tot)) + '</span></div><div class="cp-grupo-corpo">';
       itens.forEach(function(r){
         h += '<div class="colab-bloco">';
         var diaV = window.vencimentosPorItem ? window.vencimentosPorItem[r.nome] : null;
@@ -3829,6 +3836,7 @@ window.initModulos = async function initModulos(){
       h += '<input class="mod-campo cad-sal" id="cp-v-' + gi + '" inputmode="numeric" placeholder="Valor (R$)" style="flex:1;min-width:110px;max-width:160px">';
       h += '<input class="mod-campo" id="cp-d-' + gi + '" inputmode="numeric" maxlength="2" placeholder="Dia (1-31)" style="max-width:100px">';
       h += '<button class="btn-dash" data-cp-add="' + gi + '">Adicionar</button></div>';
+      h += '</div></div>';
     });
     h += '</div>';
     return h;
