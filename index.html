@@ -3432,6 +3432,7 @@ window.initModulos = async function initModulos(){
     h += cardSociosCadastro();
     h += cardEscalaCadastro();
     h += cardContasPagarCadastro();
+    h += cardAcessoCadastro();
     box.innerHTML = h;
   }
 
@@ -3455,6 +3456,7 @@ window.initModulos = async function initModulos(){
     if (!btn) return;
     if (await handlersCP(btn)) return;
     if (await handlersSociosEscala(btn)) return;
+    if (await handlersAcesso(btn)) return;
 
     if (btn.id === 'cad-add'){
       var nome = document.getElementById('cad-nome').value.trim();
@@ -3524,6 +3526,142 @@ window.initModulos = async function initModulos(){
       paintEquipe();
       avisar('msg-cadastros', 'Funcionário removido.');
     }
+  }
+
+  /* ------------- CADASTROS: acesso (senha e usuários) ------------- */
+  var acesso = { admin: false, email: '', usuarios: null, erro: '', resetId: null };
+
+  function fmtDataHora(iso){
+    if (!iso) return 'nunca';
+    var d = new Date(iso); if (isNaN(d)) return '—';
+    return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+  async function chamarUsuarios(corpo){
+    try{
+      var r = await sb.functions.invoke('gerenciar-usuarios', { body: corpo });
+      if (r.error){
+        var msg = r.error.message || 'erro desconhecido';
+        var status = r.error.context && r.error.context.status;
+        try{ var j = await r.error.context.json(); if (j && j.erro) msg = j.erro; }catch(e){}
+        if (status === 404) msg = 'A função "gerenciar-usuarios" ainda não foi publicada no Supabase.';
+        return { erro: msg };
+      }
+      if (r.data && r.data.erro) return { erro: r.data.erro };
+      return r.data || {};
+    }catch(e){ return { erro: (e && e.message) || 'erro desconhecido' }; }
+  }
+  async function carregarUsuarios(){
+    var r = await chamarUsuarios({ acao: 'listar' });
+    if (r.erro){ acesso.erro = r.erro; acesso.usuarios = null; }
+    else { acesso.erro = ''; acesso.usuarios = r.usuarios || []; }
+  }
+  async function carregarAcesso(){
+    try{
+      var u = await sb.auth.getUser();
+      var usr = u && u.data && u.data.user;
+      acesso.email = (usr && usr.email) || '';
+      acesso.admin = !!(usr && usr.app_metadata && usr.app_metadata.admin === true);
+    }catch(e){ acesso.admin = false; }
+    if (acesso.admin) await carregarUsuarios();
+  }
+
+  function cardAcessoCadastro(){
+    var h = '<div class="card"><h3>Acesso ao sistema</h3>';
+    h += '<div class="cardsub">Troque a sua senha' + (acesso.email ? ' (' + esc(acesso.email) + ')' : '') + ' e, se você for o administrador, cadastre quem pode entrar no sistema.</div>';
+
+    h += '<div class="mod-setor">Alterar minha senha</div>';
+    h += '<div class="mod-linha" style="flex-wrap:wrap;gap:8px">';
+    h += '<input class="mod-campo" type="password" id="ac-nova" autocomplete="new-password" placeholder="Nova senha (mín. 8 caracteres)" style="flex:1;min-width:190px">';
+    h += '<input class="mod-campo" type="password" id="ac-nova2" autocomplete="new-password" placeholder="Repita a nova senha" style="flex:1;min-width:170px">';
+    h += '<button class="btn-dash" id="ac-trocar">Alterar senha</button></div>';
+
+    h += '<div class="mod-setor">Usuários do sistema</div>';
+    if (!acesso.admin){
+      h += '<div class="mod-vazio">O cadastro de usuários é feito pelo administrador do sistema.</div>';
+    } else {
+      if (acesso.erro) h += '<div class="mod-aviso alerta">' + esc(acesso.erro) + '</div>';
+      (acesso.usuarios || []).forEach(function(x){
+        var eu = x.email === acesso.email;
+        h += '<div class="colab-bloco"><div class="mod-item"><span class="txt"><b>' + esc(x.email) + '</b>' + (eu ? ' <span class="mod-msg">· você</span>' : '') + '</span>';
+        h += '<span class="mod-tag">' + (x.admin ? 'administrador' : (x.perfil === 'recepcao' ? 'recepção' : (x.perfil === 'gestao' ? 'gestão' : 'sem perfil'))) + '</span></div>';
+        h += '<div class="cardsub" style="margin:2px 0 6px">Último acesso: ' + esc(fmtDataHora(x.ultimo_acesso)) + '</div>';
+        if (acesso.resetId === x.id){
+          h += '<div class="mod-linha" style="flex-wrap:wrap;gap:8px"><input class="mod-campo" type="text" id="ac-reset-senha" autocomplete="off" placeholder="Nova senha (mín. 8 caracteres)" style="flex:1;min-width:200px">';
+          h += '<button class="btn-dash" data-ac-reset-ok="' + esc(x.id) + '">Salvar senha</button> <button class="btn-dash" data-ac-reset-cancel="1">Cancelar</button></div>';
+        } else {
+          h += '<button class="mod-mini" data-ac-reset="' + esc(x.id) + '">nova senha</button>';
+          if (!eu) h += ' <button class="mod-mini" data-ac-remover="' + esc(x.id) + '" data-ac-email="' + esc(x.email) + '">remover</button>';
+        }
+        h += '</div>';
+      });
+      h += '<div class="mod-setor">Cadastrar novo usuário</div>';
+      h += '<div class="mod-linha" style="flex-wrap:wrap;gap:8px">';
+      h += '<input class="mod-campo" type="email" id="ac-novo-email" autocomplete="off" placeholder="E-mail" style="flex:1;min-width:190px">';
+      h += '<input class="mod-campo" type="text" id="ac-novo-senha" autocomplete="off" placeholder="Senha provisória (mín. 8)" style="flex:1;min-width:170px">';
+      h += '<select class="mod-campo" id="ac-novo-perfil" style="max-width:150px"><option value="recepcao">Recepção</option><option value="gestao">Gestão</option></select>';
+      h += '<button class="btn-dash" id="ac-criar">Cadastrar</button></div>';
+      h += '<div class="cardsub">Passe o e-mail e a senha provisória para a pessoa; ela pode trocar a senha aqui em Cadastros. Recepção entra pela página da recepção; Gestão entra no sistema completo.</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  async function handlersAcesso(btn){
+    if (btn.id === 'ac-trocar'){
+      var n1 = document.getElementById('ac-nova').value, n2 = document.getElementById('ac-nova2').value;
+      if (n1.length < 8){ avisar('msg-cadastros', 'A nova senha precisa ter pelo menos 8 caracteres.'); return true; }
+      if (n1 !== n2){ avisar('msg-cadastros', 'As duas senhas não são iguais.'); return true; }
+      btn.disabled = true; avisar('msg-cadastros', 'Alterando…');
+      var r = await sb.auth.updateUser({ password: n1 });
+      btn.disabled = false;
+      if (r.error){ avisar('msg-cadastros', 'Não consegui alterar a senha: ' + (r.error.message || 'erro desconhecido')); return true; }
+      document.getElementById('ac-nova').value = ''; document.getElementById('ac-nova2').value = '';
+      avisar('msg-cadastros', 'Senha alterada. Use a nova senha no próximo acesso.');
+      return true;
+    }
+
+    if (btn.id === 'ac-criar'){
+      var email = document.getElementById('ac-novo-email').value.trim();
+      var senha = document.getElementById('ac-novo-senha').value;
+      var perfil = document.getElementById('ac-novo-perfil').value;
+      if (!email){ avisar('msg-cadastros', 'Informe o e-mail do novo usuário.'); return true; }
+      if (senha.length < 8){ avisar('msg-cadastros', 'A senha provisória precisa ter pelo menos 8 caracteres.'); return true; }
+      btn.disabled = true; avisar('msg-cadastros', 'Cadastrando…');
+      var rc = await chamarUsuarios({ acao: 'criar', email: email, senha: senha, perfil: perfil });
+      btn.disabled = false;
+      if (rc.erro){ avisar('msg-cadastros', 'Não consegui cadastrar: ' + rc.erro); return true; }
+      await carregarUsuarios(); paintCadastros();
+      avisar('msg-cadastros', 'Usuário cadastrado. Já pode entrar com o e-mail e a senha provisória.');
+      return true;
+    }
+
+    var rs = btn.getAttribute('data-ac-reset');
+    if (rs){ acesso.resetId = rs; paintCadastros(); return true; }
+    if (btn.getAttribute('data-ac-reset-cancel')){ acesso.resetId = null; paintCadastros(); return true; }
+    var rsOk = btn.getAttribute('data-ac-reset-ok');
+    if (rsOk){
+      var ns = document.getElementById('ac-reset-senha').value;
+      if (ns.length < 8){ avisar('msg-cadastros', 'A senha precisa ter pelo menos 8 caracteres.'); return true; }
+      btn.disabled = true; avisar('msg-cadastros', 'Salvando…');
+      var rr = await chamarUsuarios({ acao: 'redefinir_senha', id: rsOk, senha: ns });
+      btn.disabled = false;
+      if (rr.erro){ avisar('msg-cadastros', 'Não consegui trocar a senha: ' + rr.erro); return true; }
+      acesso.resetId = null; paintCadastros();
+      avisar('msg-cadastros', 'Senha trocada.');
+      return true;
+    }
+
+    var rm = btn.getAttribute('data-ac-remover');
+    if (rm){
+      var em = btn.getAttribute('data-ac-email') || 'este usuário';
+      if (!window.confirm('Remover o acesso de "' + em + '"? A pessoa não conseguirá mais entrar no sistema.')) return true;
+      var rd = await chamarUsuarios({ acao: 'remover', id: rm });
+      if (rd.erro){ avisar('msg-cadastros', 'Não consegui remover: ' + rd.erro); return true; }
+      await carregarUsuarios(); paintCadastros();
+      avisar('msg-cadastros', 'Usuário removido.');
+      return true;
+    }
+    return false;
   }
 
   /* ------------- CADASTROS: sócios e regras da escala ------------- */
@@ -4050,6 +4188,7 @@ window.initModulos = async function initModulos(){
   var bc = document.getElementById('mod-checklist');
   var bv = document.getElementById('mod-validade');
   await carregarEscCfg();
+  await carregarAcesso();
   var bcad = document.getElementById('mod-cadastros');
   if (bcad){
     bcad.addEventListener('click', handlersCadastros);
