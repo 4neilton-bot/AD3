@@ -165,6 +165,7 @@
 
   table.datatable { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.datatable th { text-align: left; padding: 8px 10px; border-bottom: 2px solid var(--grid); color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+  table.datatable th.num { text-align: right; }
   table.datatable td { padding: 8px 10px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
   table.datatable tr:last-child td { border-bottom: none; font-weight: 700; }
   .num { text-align: right; white-space: nowrap; }
@@ -830,6 +831,21 @@ const GRUPOS_CP = CP_SEED.grupos.map(function(g){ return g.nome; });
 var CP_ITENS_DB = [];     // linhas da tabela contas_pagar_itens
 var CP_GRUPOS_DB = {};    // grupo -> orçamento do grupo (usado quando o grupo não tem itens)
 window.__cpOrcamentoErro = '';
+const GRUPO_FOLHA = 'FOLHA DE PESSOAL';
+
+// Funcionários com salário cadastrado viram itens automáticos da Folha de Pessoal
+// (nome do funcionário = nome do item; valor planejado = salário).
+function folhaFuncionarios(){
+  var colabs = (typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.colaboradores) ? LANCAMENTOS.colaboradores : [];
+  var manuais = {};
+  CP_ITENS_DB.forEach(function(r){ manuais[String(r.nome).toLowerCase()] = true; });
+  return colabs.filter(function(c){
+      var v = Number(c.salario);
+      return c.salario !== '' && c.salario != null && !isNaN(v) && v > 0 && !manuais[String(c.nome).toLowerCase()];
+    })
+    .map(function(c){ return { nome: c.nome, cargo: c.cargo || '', planejado: Number(c.salario) }; })
+    .sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+}
 
 function aplicarOrcamentoContasPagar(){
   var base = EXTERNAL.contas_pagar;
@@ -837,6 +853,7 @@ function aplicarOrcamentoContasPagar(){
     var itens = CP_ITENS_DB.filter(function(r){ return r.grupo === nome; })
       .sort(function(a,b){ return (a.ordem||0) - (b.ordem||0); })
       .map(function(r){ return { nome: r.nome, planejado: Number(r.planejado) || 0, realizado: null }; });
+    if (nome === GRUPO_FOLHA) itens = folhaFuncionarios().map(function(f){ return { nome: f.nome, planejado: f.planejado, realizado: null }; }).concat(itens);
     var plan = itens.length ? itens.reduce(function(a,i){ return a + i.planejado; }, 0) : (Number(CP_GRUPOS_DB[nome]) || 0);
     return { nome: nome, planejado: plan, realizado: 0, itens: itens };
   });
@@ -3405,7 +3422,7 @@ window.initModulos = async function initModulos(){
     var h = '<div class="mod-bar"><span id="msg-cadastros" class="mod-msg"></span></div>';
 
     h += '<div class="card"><h3>Funcionários</h3>';
-    h += '<div class="cardsub">Cadastre quem trabalha na academia (nome, cargo e salário). O que for cadastrado aparece automaticamente na aba Equipe.</div>';
+    h += '<div class="cardsub">Cadastre quem trabalha na academia (nome, cargo e salário). O que for cadastrado aparece automaticamente na aba Equipe e, quando tiver salário, na Folha de Pessoal (Contas a Pagar).</div>';
     h += '<datalist id="cad-cargos-list">' + CARGOS_SUGERIDOS.map(function(x){ return '<option value="' + x + '">'; }).join('') + '</datalist>';
     h += '<div class="mod-linha" style="flex-wrap:wrap;gap:8px">';
     h += '<input class="mod-campo" id="cad-nome" placeholder="Nome" style="flex:1;min-width:150px">';
@@ -3481,8 +3498,8 @@ window.initModulos = async function initModulos(){
       if (res.error){ erroCad(res, 'Não consegui adicionar'); return; }
       L.colaboradores.push(colabDe(res.data));
       L.colaboradores.sort(function(a,b){ return a.nome.localeCompare(b.nome); });
-      paintEquipe();
-      avisar('msg-cadastros', 'Funcionário adicionado — já aparece na aba Equipe.');
+      paintEquipe(); cpRefresh();
+      avisar('msg-cadastros', 'Funcionário adicionado — já aparece na aba Equipe' + (novo.salario ? ' e na Folha de Pessoal.' : '.'));
       return;
     }
 
@@ -3516,8 +3533,8 @@ window.initModulos = async function initModulos(){
       colab.nome = nNome; colab.cargo = nCargo; colab.salario = nSalIn ? displayToNumberTop(nSalIn) : '';
       L.colaboradores.sort(function(a,b){ return a.nome.localeCompare(b.nome); });
       cadEditId = null;
-      paintEquipe();
-      avisar('msg-cadastros', 'Salvo — já aparece na aba Equipe.');
+      paintEquipe(); cpRefresh();
+      avisar('msg-cadastros', 'Salvo — Equipe e Folha de Pessoal atualizadas.');
       return;
     }
 
@@ -3530,7 +3547,7 @@ window.initModulos = async function initModulos(){
       if (res3.error){ erroCad(res3, 'Não consegui remover'); return; }
       L.colaboradores = L.colaboradores.filter(function(c){ return c.id !== rm; });
       if (cadEditId === rm) cadEditId = null;
-      paintEquipe();
+      paintEquipe(); cpRefresh();
       avisar('msg-cadastros', 'Funcionário removido.');
     }
   }
@@ -3800,7 +3817,8 @@ window.initModulos = async function initModulos(){
   }
   function cpNomeExiste(nome, ignorarId){
     var k = nome.toLowerCase();
-    return CP_ITENS_DB.some(function(r){ return r.id !== ignorarId && String(r.nome).toLowerCase() === k; });
+    return CP_ITENS_DB.some(function(r){ return r.id !== ignorarId && String(r.nome).toLowerCase() === k; })
+      || folhaFuncionarios().some(function(f){ return f.nome.toLowerCase() === k; });
   }
   function cardContasPagarCadastro(){
     var h = '<div class="card"><h3>Contas a pagar — itens e valores planejados</h3>';
@@ -3810,8 +3828,14 @@ window.initModulos = async function initModulos(){
     }
     GRUPOS_CP.forEach(function(g, gi){
       var itens = CP_ITENS_DB.filter(function(r){ return r.grupo === g; }).sort(function(a,b){ return (a.ordem||0) - (b.ordem||0); });
-      var tot = itens.length ? itens.reduce(function(a,r){ return a + nSal(r.planejado); }, 0) : nSal(CP_GRUPOS_DB[g]);
-      h += '<div class="cp-grupo"><div class="cp-grupo-head"><span class="cp-grupo-nome">' + esc(g) + '<small>' + itens.length + (itens.length === 1 ? ' item' : ' itens') + '</small></span><span class="cp-grupo-tot">' + esc(fmtBRL(tot)) + '</span></div><div class="cp-grupo-corpo">';
+      var auto = (g === GRUPO_FOLHA) ? folhaFuncionarios() : [];
+      var tot = (itens.length || auto.length) ? itens.reduce(function(a,r){ return a + nSal(r.planejado); }, 0) + auto.reduce(function(a,f){ return a + f.planejado; }, 0) : nSal(CP_GRUPOS_DB[g]);
+      h += '<div class="cp-grupo"><div class="cp-grupo-head"><span class="cp-grupo-nome">' + esc(g) + '<small>' + (itens.length + auto.length) + ((itens.length + auto.length) === 1 ? ' item' : ' itens') + '</small></span><span class="cp-grupo-tot">' + esc(fmtBRL(tot)) + '</span></div><div class="cp-grupo-corpo">';
+      auto.forEach(function(f){
+        var diaF = window.vencimentosPorItem ? window.vencimentosPorItem[f.nome] : null;
+        h += '<div class="colab-bloco"><div class="mod-item"><span class="txt">' + esc(f.nome) + ' <span class="mod-msg">· ' + esc(f.cargo || 'funcionário') + (diaF ? ' · vence dia ' + esc(diaF) : '') + '</span></span><span class="mod-tag">' + esc(fmtBRL(f.planejado)) + '</span></div>';
+        h += '<div class="cardsub" style="margin:2px 0 0">Vem do cadastro de Funcionários (salário). Para alterar, edite lá em cima.</div></div>';
+      });
       itens.forEach(function(r){
         h += '<div class="colab-bloco">';
         var diaV = window.vencimentosPorItem ? window.vencimentosPorItem[r.nome] : null;
@@ -3826,7 +3850,7 @@ window.initModulos = async function initModulos(){
         }
         h += '</div>';
       });
-      if (!itens.length){
+      if (!itens.length && !auto.length){
         h += '<div class="mod-linha" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="mod-msg">Sem itens — orçamento do grupo:</span>';
         h += '<input class="mod-campo cad-sal" id="cp-g-' + gi + '" inputmode="numeric" value="' + esc(moneyValueToDisplayTop(CP_GRUPOS_DB[g])) + '" style="max-width:140px">';
         h += '<button class="mod-mini" data-cp-grupo="' + gi + '">salvar orçamento</button></div>';
@@ -4231,6 +4255,11 @@ window.initModulos = async function initModulos(){
   }
 
   window.repaintCadastros = paintCadastros;
+  if (!window.__cpOrcamentoErro && typeof aplicarOrcamentoContasPagar === 'function'){
+    aplicarOrcamentoContasPagar();
+    if (window.renderContasPagar) window.renderContasPagar();
+    if (window.repaintInicio) window.repaintInicio();
+  }
   window.contagemChecklistAtual = contagemChecklist;
   window.registrosEquipeMesAtual = function(){
     var mes = hojeISO().slice(0,7);
@@ -5180,12 +5209,11 @@ window.initGerencial = async function initGerencial(){
     h += '<div class="kpi"><h4>' + socioRot(2) + '</h4><div class="v">' + brl(c.geralS3) + '</div></div>';
     h += '</div></div>';
 
-    h += '<div class="mod-linha" style="margin:14px 0 30px"><button class="btn-dash" id="ger-salvar">Salvar mês</button></div>';
+    h += '<div class="mod-linha" style="margin:14px 0 30px;align-items:center"><button class="btn-dash" id="ger-salvar">Salvar mês</button><span id="msg-gerencial-rodape" class="mod-msg" style="margin-left:12px"></span></div>';
 
     box.innerHTML = h;
 
-    CAMPOS_NUM.forEach(function(c2){
-      var idMap = {
+    var idMap = {
         quantidade_produtos:'ger-qtd', venda_bruta:'ger-vendabruta', crediario:'ger-crediario', cartao:'ger-cartao', dinheiro_pix:'ger-dinpix',
         custo_venda:'ger-custo', saldo_mes_passado:'ger-saldopass', compras_mes:'ger-compras',
         valor_custo_estoque:'ger-vcusto', valor_venda_estoque:'ger-vvenda', em_transito:'ger-transito',
@@ -5195,7 +5223,8 @@ window.initGerencial = async function initGerencial(){
         totalpass_receita:'ger-totalpass-r', totalpass_futuro:'ger-totalpass-f', wellhub_receita:'ger-wellhub-r', wellhub_futuro:'ger-wellhub-f',
         despesas_pagas:'ger-despesas', nf_nexfitpay:'ger-nf-nexfitpay',
         nf_notas_planos:'ger-nf-notas-planos', nf_notas_suplementos:'ger-nf-notas-suplementos'
-      };
+    };
+    CAMPOS_NUM.forEach(function(c2){
       var el = document.getElementById(idMap[c2]);
       if (el) el.addEventListener('change', function(){
         dados[c2] = el.classList.contains('mod-campo-numero') ? (parseInt(el.value, 10) || 0) : parseBRL(el.value);
@@ -5217,8 +5246,16 @@ window.initGerencial = async function initGerencial(){
     var btnSalvar = document.getElementById('ger-salvar');
     if (btnSalvar) btnSalvar.addEventListener('click', async function(){
       btnSalvar.disabled = true;
-      var msg = document.getElementById('msg-gerencial');
+      var msgTopo = document.getElementById('msg-gerencial');
+      var msgRodape = document.getElementById('msg-gerencial-rodape');
+      var msg = { set textContent(t){ if (msgTopo) msgTopo.textContent = t; if (msgRodape) msgRodape.textContent = t; } };
       msg.textContent = 'Salvando…';
+      // Lê o que está digitado agora em cada campo. Só confiar no evento "change" perde o último valor
+      // quando se toca em "Salvar mês" sem sair do campo (acontece no celular).
+      CAMPOS_NUM.forEach(function(c2){
+        var campoEl = document.getElementById(idMap[c2]);
+        if (campoEl) dados[c2] = campoEl.classList.contains('mod-campo-numero') ? (parseInt(campoEl.value, 10) || 0) : parseBRL(campoEl.value);
+      });
       if (mesSel === mesAtual()){
         var soAgora = (typeof LANCAMENTOS !== 'undefined' && LANCAMENTOS.saldoOnline) ? LANCAMENTOS.saldoOnline : {};
         dados.saldo_online_dinheiro = n(soAgora.Dinheiro);
@@ -5235,7 +5272,9 @@ window.initGerencial = async function initGerencial(){
       }
       msg.textContent = 'Salvo.';
       var ok = await atualizarResumoGerencialTodos();
-      msg.textContent = ok ? 'Salvo — resumo atualizado.' : 'Mês salvo, mas o resumo não atualizou. Tenta de novo em instantes.';
+      var textoFinal = ok ? 'Salvo — resumo atualizado.' : 'Mês salvo, mas o resumo não atualizou. Tenta de novo em instantes.';
+      render();   // atualiza os totais da tela com o que acabou de ser salvo
+      ['msg-gerencial', 'msg-gerencial-rodape'].forEach(function(idMsg){ var e = document.getElementById(idMsg); if (e) e.textContent = textoFinal; });
     });
   }
 
